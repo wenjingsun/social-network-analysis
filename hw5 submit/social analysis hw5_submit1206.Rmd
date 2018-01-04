@@ -1,0 +1,210 @@
+---
+title: "Wenjing Sun HW5"
+output:
+  html_document:
+    df_print: paged
+---
+
+#data preparation
+
+```{r}
+rm(list = ls(all = TRUE))
+library(sna)
+library(data.table)
+library(ergm)
+library(network)
+library(plyr)
+
+data<-fread("startup_rounds_and_participants.csv",header=TRUE)
+
+data$startup_id<-as.character(data$startup_id)
+data$participant_id<-as.character(data$participant_id)
+
+edge1<-data
+
+# specify the network we'll call net - where dyads are the unit of analysis...
+net=network(edge1[,c("participant_id", "startup_id")])
+
+# assign edge-level attributes - dyad attributes
+set.edge.attribute(net, "traction", edge1[,"traction"])
+set.edge.attribute(net, "round", edge1[,"startup_round_id"])
+set.edge.attribute(net, "date", edge1[,"round_record_date"])
+
+# assign node-level attributes to actors in "net"
+net %v% "participant_type" = edge1[,"participant_type"]
+
+
+
+```
+
+#Question 1
+Use the network information provided and an ERGM model to predict whether reciprocation
+is more or less likely in this network. What if we only consider connections between startups?
+Why does the second model appear different? Include an edges intercept in both models.
+```{R}
+
+m1=ergm(net ~ edges + mutual,burnin=15000,MCMCsamplesize=30000,verbose=FALSE)
+summary(m1)
+
+exp(m1[1]$coef)
+
+```
+
+```{r}
+#only consider connections between startups
+edge2<-edge1[,c("participant_id", "startup_id")][which(edge1[,"participant_type"]=="Startup"),]
+net_start<-network(edge2)
+# assign edge-level attributes - dyad attributes
+set.edge.attribute(net_start, "traction", edge1[,"traction"])
+set.edge.attribute(net_start, "round", edge1[,"startup_round_id"])
+set.edge.attribute(net_start, "date", edge1[,"round_record_date"])
+
+# assign node-level attributes to actors in "net"
+net %v% "participant_type" = edge1[,"participant_type"]
+m2=ergm(net_start~ edges + mutual ,burnin=15000,MCMCsamplesize=30000,verbose=FALSE)
+summary(m2)
+
+lapply(m2[1],exp)
+
+```
+
+#Question 2
+Use the network information and an ERGM model to predict whether startups are more
+likely to have larger fundraising rounds (i.e., the "has as a participant" relationship is more
+likely to exist) if they also participate in more funding rounds. You can run the model on
+the entire network or just relationships between startups. In either case, include an edges
+intercept as well as a mutuality covariate in the model.
+
+```{r}
+
+net_start1<-network(edge1[,c(1,2)])
+
+net_start1 %v% "degree"=degree(net_start1,"in")
+
+m3<-ergm(net_start1~edges+mutual+nodeicov("degree"))
+summary(m3)
+lapply(m3[1],exp)
+
+
+```
+
+
+#Question 3
+Use the network information provided and an ERGM model to predict whether an investor
+is more or less likely to participate in a startup's round if it has participated in one of its
+rounds in the previous period. Include an edges intercept in the model.
+
+```{r warning=FALSE}
+startupid<-unique(edge1[,2])
+
+edge1$Q3<-edge1$participant_id %in% startupid
+edge3<-edge1[!is.na(edge1$traction),]
+
+net_start2013<-edge3[year(as.Date(edge3$round_record_date))==2013,]
+net2013<-network(net_start2013[,c(1,2)])
+set.edge.attribute(net2013, "Q3", net_start2013[,7])
+m4 <- ergm(net2013 ~ edges + mutual + edgecov(net2013, attrname = "Q3"))
+
+summary(m4)
+exp(m4[1]$coef)
+
+```
+
+#Question 4
+
+Use the network and startup attributes and an ERGM model to predict whether a startup
+is more likely to have participants in its rounds that have gained similar levels of traction
+in the current period. Then, build a model to predcict whether a startup is more likely to
+have participants in its rounds that have gained similar levels of traction using a term for the
+current period as well as the previous period. Only consider interactions between startups
+in these models, and include an edges intercept in both models.
+
+```{r}
+#(1)
+net_start2013_4<-merge.data.frame(net_start2013,net_start2013[,c(2,6)],by.x="participant_id",by.y="startup_id")
+net_start2013_4<-net_start2013_4[year(as.Date(net_start2013_4$round_record_date))==2013,]
+net2013_4<-network(net_start2013_4[,c(1,2)])
+set.vertex.attribute(net2013_4, "traction.y", net_start2013_4[,8])
+m4_1 <- ergm(net2013_4 ~ edges + mutual + absdiff("traction.y"))
+
+summary(m4_1)
+lapply(m4_1[1],exp)
+
+
+#(2)
+net_start4<-merge.data.frame(edge3,edge3[,c(2,6)],by.x="participant_id",by.y="startup_id")
+net4 <-network(net_start4[,c(1,2)])
+set.vertex.attribute(net4, "traction.p", net_start4[,8])
+m5 <- ergm(net4 ~ edges + mutual +  absdiff("traction.p"))
+summary(m5)
+lapply(m5[1],exp)
+
+
+
+```
+
+#Question 5
+Of the models run so far, which has the best fit to the actual network? Discuss the model
+fit using (1) the built-in mcmc diagnostics, (2) a simulation of the actual network using the
+results from the model, and (3) a goodness-of-fit analysis of the estimated model.
+```{r}
+
+#m1
+m1.sim=simulate(m1,nsim=100);
+simnet1=m1.sim[[1]]
+mcmc.diagnostics(m1)
+plot(simnet1)
+
+#m2
+m2.sim=simulate(m2,nsim=100);
+simnet2=m2.sim[[1]]
+mcmc.diagnostics(m2)
+plot(simnet2)
+
+
+
+#m3 I think this one is the best model
+m3.sim=simulate(m3,nsim=100);
+simnet3=m3.sim[[1]]
+mcmc.diagnostics(m2)
+plot(simnet3)
+
+
+#m4_1
+m4_1.sim=simulate(m4_1,nsim=100);
+simnet4_1=m4_1.sim[[1]]
+mcmc.diagnostics(m4_1)
+plot(simnet4_1)
+
+
+#m4
+m4.sim=simulate(m4,nsim=100);
+simnet4=m4.sim[[1]]
+mcmc.diagnostics(m4)
+plot(simnet4)
+
+
+#m5
+m5.sim=simulate(m4,nsim=100);
+simnet5=m5.sim[[1]]
+mcmc.diagnostics(m5)
+plot(simnet5)
+
+
+
+```
+
+
+#Extra challenge problem
+RSiena provides a similar function to ERGM, but is more tailored
+for longitudinal data. Re-run the longitudinal models above (Questions 3, 4) using RSiena to
+determine if RSiena and ERGM produce similar results.
+
+```{r}
+library(RSiena)
+
+
+
+
+```
+

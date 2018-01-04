@@ -1,0 +1,425 @@
+---
+title: "Wenjing Sun_SNA HW2"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(igraph)
+library(NetData)
+library(data.table)
+rm(list = ls(all = TRUE))
+setwd("D:/social network analysis/HW2")
+```
+
+```{r}
+data(studentnets.S641, package = "NetData")
+```
+
+```{r}
+# check objects
+ls()
+```
+#Question 1
+Return to the classrom exercise featuring the S641 data, which can be accessed with
+data(studentnets.S641, package = "NetData"). Generate indegree, outdegree, undirected
+closeness (as opposed to the directed version in the example), betweenness, and undirected
+eigenvector centrality statistics for each individual the task network. Compute the
+correlations of the five centrality measures you generate in the task talk network with the
+same measures for each individual in the socializing network. Which measures in the task
+network are most closely related to those in the socializing network? What sort of substantive
+story can you derive from all of these results?
+
+## answer: Closeness,betweenneww, outdegree are most closely related in two networks. The both networks have similar structures. The probability is high that People who have task_ties also have social ties, and vice versa. 
+```{r}
+# reduce to non-zero edges and build a graph object
+task_nonzero_edges = subset(task_df, task_tie > 0)
+
+ 
+task = graph.data.frame(task_nonzero_edges) 
+
+
+# plot each network
+plot.igraph(task, layout=layout.fruchterman.reingold, edge.arrow.size=.5)
+
+# in a directed network, we can think of in-closeness centrality as the average number of steps needed to get to a node from all the other nodes. out-closeness centrality measures the same thing with the directionality reversed
+
+#indegree of task
+indegree_task<-degree(task, mode = "in")
+indegree_task
+
+#outdegree of task
+outdegree_task<-degree(task, mode = "out", loops = TRUE, normalized = FALSE)
+outdegree_task
+
+# closeness centrality undirected task
+allcloseness_task = closeness(task, mode='all')
+allcloseness_task
+
+# betweenness centrality measures the number of shortest paths going through a specific vertex and is returned by the betweenness() function
+betweenness_task = betweenness(task,directed=TRUE)
+betweenness_task
+
+#undirected eigenvector centrality
+task_eigen<-eigen_centrality(task, directed = FALSE)$vector
+task_eigen
+```
+```{r}
+# reduce to non-zero edges and build a graph object
+social_nonzero_edges = subset(social_df, social_tie > 0)
+ 
+social = graph.data.frame(social_nonzero_edges) 
+
+# plot each network
+plot.igraph(social, layout=layout.fruchterman.reingold, edge.arrow.size=.5)
+
+# in a directed network, we can think of in-closeness centrality as the average number of steps needed to get to a node from all the other nodes. out-closeness centrality measures the same thing with the directionality reversed
+
+#indegree of social
+indegree_social<-degree(social, mode = "in", loops = TRUE, normalized = FALSE)
+indegree_social
+
+#outdegree of social
+outdegree_social<-degree(social, mode = "out", loops = TRUE, normalized = FALSE)
+outdegree_social
+
+# closeness centrality undirected social
+allcloseness_social = closeness(social, mode='all')
+allcloseness_social
+
+# betweenness centrality measures the number of shortest paths going through a specific vertex and is returned by the betweenness() function
+betweenness_social = betweenness(social,directed=TRUE)
+betweenness_social
+
+#undirected eigenvector centrality
+social_eigen<-eigen_centrality(social, directed = FALSE)$vector
+social_eigen
+```
+```{r}
+#correlation
+
+fun_cor<-function(x){
+  c<-c()
+  for(i in 1:22){
+    for (j in 1:length(x)){
+      if (as.numeric(rownames(data.frame(x)))[j]==i)
+        c[i]<-x[j]
+    }
+  }
+  return (c)
+}
+
+
+cor(fun_cor(indegree_social),fun_cor(indegree_task),use = "complete.obs")
+cor(fun_cor(outdegree_social),fun_cor(outdegree_task),use = "complete.obs")
+cor(fun_cor(allcloseness_social),fun_cor(allcloseness_task),use = "complete.obs")
+cor(fun_cor(betweenness_social),fun_cor(betweenness_task),use = "complete.obs")
+cor(fun_cor(social_eigen),fun_cor(task_eigen),use = "complete.obs")
+
+```
+
+# Question 2
+Remaining with the classroom network, suppose that a tie is strong if it is above the mean
+strength for that type, conditional on the tie existing. Consider both social and task ties
+as being a part of the same network. Under this definition, does the network satisfy Strong
+Triadic Closure? 
+Now suppose that a tie is strong if it is above the median strength for that
+type, conditional on the tie existing. Under this definiton, does the network satisfy Strong
+Triadic Closure? What conclusions can you draw from these results?
+
+## answer: Under the definition using mean, the network does not satisfy strong triadic closure. There are 5 groups of nodes with 2 strong and 0 relationships among the nodes.Under the definition using median, the network does not satisfy strong triadic closure. There are 37 groups of nodes with 2 strong and 0 relationships among the nodes.Details are after the codes below. Whether a network satisfies strong triadic closure can depend on the structure of data and the definition of strong/weak relationship.
+
+```{r}
+full = s641_full_data_frame
+for (i in 1:nrow(full)){
+  if (full[i,3]>0)
+    full[i,"social_1"]=1
+  else
+    full[i,"social_1"]=0
+}
+
+for (i in 1:nrow(full)){
+  if (full[i,4]>0)
+    full[i,"task_1"]=1
+  else
+    full[i,"task_1"]=0
+}
+
+mean_social<-sum(full[3])/sum(full["social_1"])
+mean_task<-sum(full[4])/sum(full["task_1"])
+
+
+for (i in 1:nrow(full)){
+  if (full[i,3]>mean_social)
+    full[i,"social_new"]=20
+  else if (full[i,3]<=mean_social&full[i,3]!=0)
+    full[i,"social_new"]=1
+  else
+    full[i,"social_new"]=full[i,3]
+}
+
+
+for (i in 1:nrow(full)){
+  if (full[i,4]>mean_task)
+    full[i,"task_new"]=20
+  else if (full[i,4]<mean_task&full[i,4]!=0)
+    full[i,"task_new"]=1
+  else
+    full[i,"task_new"]=full[i,4]
+}
+
+
+for (i in 1:nrow(full)){
+  if (full[i,"social_new"]>=full[i,"task_new"])
+    full[i,"triad"]=full[i,"social_new"]
+  else
+    full[i,"triad"]=full[i,"task_new"]
+}
+
+full_matrix<-matrix(nrow=22,ncol=22)
+for (i in 1:nrow(full)){
+    full_matrix[full[i,1],full[i,2]]<-full[i,9]
+}
+mean_s<-0
+mean_s_matrix<-matrix(ncol=3)
+for (i in 1:22){
+  for (j in 1:22){
+    for (k in 1:22){
+      if(j>k)
+        if (full_matrix[i,j]==20&full_matrix[i,k]==20 & full_matrix[j,k]==0&full_matrix[k,j]==0){
+          mean_s_matrix<-rbind(mean_s_matrix,c(i,j,k))
+          mean_s=mean_s+1}
+           
+  }}}
+
+mean_s
+mean_s_matrix
+
+```
+
+```{r}
+
+#median
+full = s641_full_data_frame
+for (i in 1:nrow(full)){
+  if (full[i,3]>0)
+    full[i,"social_1"]=1
+  else
+    full[i,"social_1"]=0
+}
+
+for (i in 1:nrow(full)){
+  if (full[i,4]>0)
+    full[i,"task_1"]=1
+  else
+    full[i,"task_1"]=0
+}
+
+median_social<-median(data.frame(subset(full,full["social_1"]>0)["social_tie"])[,1])
+median_task<-median(data.frame(subset(full,full["task_1"]>0)["task_tie"])[,1])
+
+for (i in 1:nrow(full)){
+  if (full[i,3]>median_social)
+    full[i,"social_new_median"]=20
+  else if (full[i,3]<=median_social&full[i,3]!=0)
+    full[i,"social_new_median"]=1
+  else
+    full[i,"social_new_median"]=full[i,3]
+}
+
+
+for (i in 1:nrow(full)){
+  if (full[i,4]>median_task)
+    full[i,"task_new_median"]=20
+  else if (full[i,4]<=median_task&full[i,4]!=0)
+    full[i,"task_new_median"]=1
+  else
+    full[i,"task_new_median"]=full[i,4]
+}
+
+
+for (i in 1:nrow(full)){
+  if (full[i,"social_new_median"]>=full[i,"task_new_median"])
+    full[i,"triad_median"]=full[i,"social_new_median"]
+  else
+    full[i,"triad_median"]=full[i,"task_new_median"]
+}
+
+full_matrix_median<-matrix(nrow=22,ncol=22)
+for (i in 1:nrow(full)){
+    full_matrix_median[full[i,1],full[i,2]]<-full[i,"triad_median"]
+}
+median_s<-0
+median_s_matrix<-matrix(ncol=3)
+for (i in 1:22){
+  for (j in 1:22){
+    for (k in 1:22){
+      if(j>k)
+        if (full_matrix_median[i,j]==20&full_matrix_median[i,k]==20 & full_matrix_median[j,k]==0&full_matrix_median[k,j]==0){
+          median_s=median_s+1
+          median_s_matrix<-rbind(median_s_matrix,c(i,j,k))
+          }
+  }}}
+
+median_s
+median_s_matrix
+```
+
+
+
+# Question 3
+It is also possible to compute betweenness on the edges in a network, as well as the vertices.
+These are good measures of flow. Calculate the edge-level betweeness for both of the types
+of tie, on the network that considers both social and task ties as being a part of the same
+network. Does it seem like edges with high betweenness tend to be strong or weak ties,
+according to our two definitions above? Does this result make sense?
+
+# answer: There's no obvious correlation between betweenness and strong/weak ties. I think it make sense because Whether a network satisfies strong triadic closure can depend on the structure of data and the definition of strong/weak relationship. Therefore, the correlation can be different and unobvious.
+```{r}
+
+edge.betweenness(social,directed = TRUE)
+edge.betweenness(task,directed = TRUE)
+full_clean<-subset(full, (social_tie > 0|task_tie > 0))
+
+full_clean_graph<-graph.data.frame(full_clean)
+full_clean[,"bw_mean"]<-edge.betweenness(full_clean_graph,directed = TRUE)
+full_clean[,"bw_mean"]
+for (i in 1:nrow(full_clean)){
+  if (full_clean[i,"social_tie"]>=mean_social)
+      full_clean[i,"social_1_mean"]=20
+  else if (full_clean[i,"social_tie"]==0)
+     full_clean[i,"social_1_mean"]=0
+  else
+     full_clean[i,"social_1_mean"]=1
+}
+
+
+for (i in 1:nrow(full_clean)){
+  if (full_clean[i,"task_tie"]>=mean_task)
+      full_clean[i,"task_1_mean"]=20
+  else if (full_clean[i,"task_tie"]==0)
+     full_clean[i,"task_1_mean"]=0
+  else
+     full_clean[i,"task_1_mean"]=1
+}
+
+
+for (i in 1:nrow(full_clean)){
+  if (full_clean[i,"task_1_mean"]>full_clean[i,"social_1_mean"])
+      full_clean[i,"mean_tie"]=full_clean[i,"task_1_mean"]
+  else
+    full_clean[i,"mean_tie"]=full_clean[i,"social_1_mean"]
+}
+
+
+for (i in 1:nrow(full_clean)){
+  if (full_clean[i,"mean_tie"]==20)
+      full_clean[i,"mean_tie"]=1
+  else
+    full_clean[i,"mean_tie"]=0
+}
+
+cor(full_clean[,"bw_mean"],as.numeric(full_clean[,"mean_tie"]))
+plot(full_clean[,"bw_mean"],as.numeric(full_clean[,"mean_tie"]))
+     
+cor(full_clean[,"bw_mean"],full_clean[,"triad_median"])
+plot(full_clean[,"bw_mean"],full_clean[,"triad_median"])
+
+```
+
+#Question 4
+Still consider the network that treats both social and task ties as being a part of the same
+network. How many pairs of nodes do not have walks between one another? Perform this
+calculation directly on the matrix.
+##anwer: There are 38 pairs of nodes do not have walks between one another.
+```{r}
+z<-matrix(0,nrow = 22,ncol = 22)
+full_clean_matrix<-data.matrix(full_clean_graph[])
+for (i in 1:nrow(full_clean_matrix)){
+  for(j in 1:ncol(full_clean_matrix)){
+    for (k in 1:22){
+      for(l in 1:22){
+        if (as.numeric(rownames(full_clean_matrix)[i])==k&as.numeric(colnames(full_clean_matrix)[j])==l)
+          z[k,l]=full_clean_matrix[i,j]    
+        else z[k,l]==0}}
+  }
+}
+
+u<-matrix(0,nrow=22,ncol=22)
+q<-z
+y<-0
+while ( y<nrow(z)) { 
+  for (i in 1:22){
+   for (j in 1:22){
+     if (q[i,j]!=0 & u[i,j]==0)
+       u[i,j]<-q[i,j]
+                }
+              }
+  y=y+1
+  q<-q %*% z}
+u
+pair<-0
+
+for (i in 1:22){
+  for (j in 1:22){
+    if (u[i,i]!=0&u[j,j]!=0&i>j& u[i,j]==0&u[i,j]==0){
+      pair=pair+1
+    }
+  }
+}
+pair
+
+```
+#Extra Challenge Problem: 
+Generate and plot a network in R in which the network-level measure
+of degree centrality is equal to 1, and another where it is equal to 0. Would this hold true for other types of centrality?
+##Answer: This holds true for closeness centrality, betweenness centrality, but not true for eigen centrality.
+```{r}
+inc_1 <- matrix(c(0,1,1,1,1,1,1,1,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0,
+                1,0,0,0,0,0,0,0), 8,8) 
+inc_1
+colnames(inc_1) <- letters[1:8] 
+rownames(inc_1) <- letters[1:8] 
+inc_graph_1<-graph_from_adjacency_matrix(inc_1)
+plot.igraph(inc_graph_1,vertex.label=NA,layout=layout.fruchterman.reingold, 
+            vertex.color="orchid1",edge.color="black",vertex.size = 10, 
+            edge.arrow.size=.3,edge.curved=FALSE)
+centrality_degree_1<-(nrow(inc_1)*7-(7+1*7))/((nrow(inc_1)-1)* ((nrow(inc_1)-2)))
+centrality_degree_1
+centr_clo(inc_graph_1,mode="all")$centralization
+centr_betw(inc_graph_1, directed = FALSE)$centralization
+centr_eigen(inc_graph_1, directed = FALSE)$centralization
+
+
+inc_0 <- matrix(c(0,1,1,1,1,1,1,1,
+                1,0,1,1,1,1,1,1,
+                1,1,0,1,1,1,1,1,
+                1,1,1,0,1,1,1,1,
+                1,1,1,1,0,1,1,1,
+                1,1,1,1,1,0,1,1,
+                1,1,1,1,1,1,0,1,
+                1,1,1,1,1,0,1,0), 8,8) 
+colnames(inc_0) <- letters[1:8] 
+rownames(inc_0) <- letters[1:8] 
+inc_0
+inc_graph_0<-graph_from_adjacency_matrix(inc_0)
+
+plot.igraph(inc_graph_0,vertex.label=NA,layout=layout.fruchterman.reingold, 
+            vertex.color="orchid1",edge.color="black",vertex.size = 10, 
+            edge.arrow.size=.3,edge.curved=FALSE)
+
+
+centrality_degree_0<-(nrow(inc_0)*7-(7*8))/((nrow(inc_0)-1)* ((nrow(inc_0)-2)))
+centrality_degree_0
+centr_clo(inc_graph_0,mode="all")$centralization
+centr_betw(inc_graph_0, directed = FALSE)$centralization
+centr_eigen(inc_graph_0, directed = FALSE)$centralization
+```
+
